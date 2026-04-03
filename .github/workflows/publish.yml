@@ -1,0 +1,97 @@
+name: publish
+
+on:
+  push:
+    branches: ["main"]
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+env:
+  IMAGE: ghcr.io/${{ github.repository_owner }}/caddy-cloudflare
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: linux/amd64
+            runner: ubuntu-latest
+          - platform: linux/arm64
+            runner: ubuntu-24.04-arm
+    runs-on: ${{ matrix.runner }}
+
+    outputs:
+      digest_amd64: ${{ steps.export.outputs.digest_amd64 }}
+      digest_arm64: ${{ steps.export.outputs.digest_arm64 }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # Build and push *single-platform* image, but push it by digest (no tag yet)
+      - name: Build & push (by digest)
+        id: bp
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: ${{ matrix.platform }}
+          push: true
+          outputs: type=image,name=${{ env.IMAGE }},push-by-digest=true,name-canonical=true
+
+      # Export digest into job outputs (one of these will be set per matrix leg)
+      - name: Export digest
+        id: export
+        shell: bash
+        run: |
+          if [ "${{ matrix.platform }}" = "linux/amd64" ]; then
+            echo "digest_amd64=${{ steps.bp.outputs.digest }}" >> $GITHUB_OUTPUT
+          else
+            echo "digest_arm64=${{ steps.bp.outputs.digest }}" >> $GITHUB_OUTPUT
+          fi
+
+  merge:
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Create and push manifest list (single tag)
+        shell: bash
+        run: |
+          # Decide tags: latest on main, and also tag name on tag pushes
+          TAGS=()
+          if [ "${{ github.ref_type }}" = "tag" ]; then
+            TAGS+=("${{ env.IMAGE }}:${{ github.ref_name }}")
+          fi
+          if [ "${{ github.ref_name }}" = "main" ]; then
+            TAGS+=("${{ env.IMAGE }}:latest")
+          fi
+
+          for t in "${TAGS[@]}"; do
+            docker buildx imagetools create \
+              -t "$t" \
+              "${{ env.IMAGE }}@${{ needs.build.outputs.digest_amd64 }}" \
+              "${{ env.IMAGE }}@${{ needs.build.outputs.digest_arm64 }}"
+          done
+
+      - name: Inspect (optional)
+        run: |
+          docker buildx imagetools inspect ${{ env.IMAGE }}:latest || true
