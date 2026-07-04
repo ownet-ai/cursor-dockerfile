@@ -47,7 +47,7 @@ ENV NODE_MAJOR=24
 ENV PNPM_VERSION=11.9.0
 
 RUN apt-get update && \
-    apt-get install -y ca-certificates git && \
+    apt-get install -y ca-certificates git openjdk-21-jre-headless && \
     rm -rf /var/lib/apt/lists/*
 
 RUN mkdir -p /home/ubuntu/.nvm && chown -R ubuntu:ubuntu /home/ubuntu/.nvm && \
