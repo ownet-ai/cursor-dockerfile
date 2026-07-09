@@ -12,6 +12,8 @@ RUN apt-get update && \
     gnupg \
     postgresql-client \
     jq \
+    ca-certificates \
+    git \
     && rm -rf /var/lib/apt/lists/*
 
 # Docker
@@ -59,8 +61,9 @@ ENV NVM_DIR=/home/ubuntu/.nvm
 ENV NODE_MAJOR=24
 ENV PNPM_VERSION=11.9.0
 
+# Java for openapitools
 RUN apt-get update && \
-    apt-get install -y ca-certificates git openjdk-21-jre-headless && \
+    apt-get install -y openjdk-21-jre-headless && \
     rm -rf /var/lib/apt/lists/*
 
 RUN mkdir -p /home/ubuntu/.nvm && chown -R ubuntu:ubuntu /home/ubuntu/.nvm && \
