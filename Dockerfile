@@ -5,15 +5,16 @@
 
 FROM ubuntu:24.04
 
+# Prerequisites
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
     curl \
     gnupg \
     postgresql-client \
     jq \
-    cloudflared \
     && rm -rf /var/lib/apt/lists/*
 
+# Docker
 RUN install -m 0755 -d /etc/apt/keyrings && \
     curl --retry 3 --retry-delay 5 -fsSL https://download.docker.com/linux/ubuntu/gpg | gpg --dearmor -o /etc/apt/keyrings/docker.gpg && \
     chmod a+r /etc/apt/keyrings/docker.gpg && \
@@ -29,20 +30,29 @@ RUN install -m 0755 -d /etc/apt/keyrings && \
     fuse-overlayfs \
     iptables \
     && rm -rf /var/lib/apt/lists/*
-
 RUN mkdir -p /etc/docker && \
     printf '%s\n' '{' \
     '  "storage-driver": "fuse-overlayfs"' \
     '}' > /etc/docker/daemon.json
 
+# Networking with Docker
 RUN update-alternatives --set iptables /usr/sbin/iptables-legacy && \
     update-alternatives --set ip6tables /usr/sbin/ip6tables-legacy
 
+# User and group setup for Docker + agent user
 RUN id -u ubuntu &>/dev/null || useradd -m -s /bin/bash ubuntu
 RUN groupadd -f docker && usermod -aG docker ubuntu
 RUN usermod -aG sudo ubuntu
 RUN mkdir -p /etc/sudoers.d/
 RUN echo "ubuntu ALL=(ALL) NOPASSWD:ALL" > /etc/sudoers.d/ubuntu
+
+# Add cloudflare gpg key
+RUN sudo mkdir -p --mode=0755 /usr/share/keyrings && \
+    curl -fsSL https://pkg.cloudflare.com/cloudflare-main.gpg | sudo tee /usr/share/keyrings/cloudflare-main.gpg >/dev/null && \
+    echo 'deb [signed-by=/usr/share/keyrings/cloudflare-main.gpg] https://pkg.cloudflare.com/cloudflared noble main' | sudo tee /etc/apt/sources.list.d/cloudflared.list
+    apt-get update && \
+    apt-get install -y cloudflared \
+    && rm -rf /var/lib/apt/lists/*
 
 # Node 24 + pnpm via nvm (appended last so layers above stay cached)
 ENV NVM_DIR=/home/ubuntu/.nvm
