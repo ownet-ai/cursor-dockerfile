@@ -6,9 +6,12 @@
 FROM ubuntu:24.04
 
 RUN apt-get update && \
-    apt-get install -y \
+    apt-get install -y --no-install-recommends \
     curl \
     gnupg \
+    postgresql-client \
+    jq \
+    cloudflared \
     && rm -rf /var/lib/apt/lists/*
 
 RUN install -m 0755 -d /etc/apt/keyrings && \
